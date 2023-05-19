@@ -1,0 +1,133 @@
+# -*- coding: utf-8 -*-
+"""
+
+@author: Abhinav Sharma
+
+_/﹋\_
+(҂`_´)
+<,︻╦╤─ ҉ - -
+_/﹋\_                                                       
+"""
+
+# Import the necessary libraries
+import os
+import numpy as np
+from PIL import Image
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
+from sklearn.metrics import accuracy_score
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+
+# Set the paths to the folders containing fractured and non-fractured bone x-rays
+fractured_folder = 'D:/Dataset/output/fractured'
+non_fractured_folder = 'D:/Dataset/output/not fractured'
+
+image_width, image_height = 224, 224
+input_shape = (image_width, image_height, 3)
+
+# Create an ImageDataGenerator for data loading and augmentation
+data_generator = ImageDataGenerator(
+    rescale=1.0/255.0,
+    rotation_range=10,
+    width_shift_range=0.1,
+    height_shift_range=0.1,
+    zoom_range=0.1,
+    horizontal_flip=True
+)
+
+# Load and preprocess the images using the data generator
+image_data = []
+labels = []
+
+# Load fractured bone x-rays
+fractured_generator = data_generator.flow_from_directory(
+    fractured_folder,
+    target_size=(image_width, image_height),
+    batch_size=32,
+    class_mode='binary',
+    shuffle=False
+)
+
+image_data.extend(fractured_generator.next()[0])
+labels.extend([1] * fractured_generator.batch_size)
+
+# Load non-fractured bone x-rays
+non_fractured_generator = data_generator.flow_from_directory(
+    non_fractured_folder,
+    target_size=(image_width, image_height),
+    batch_size=32,
+    class_mode='binary',
+    shuffle=False
+)
+
+image_data.extend(non_fractured_generator.next()[0])
+labels.extend([0] * non_fractured_generator.batch_size)
+
+# Convert the image data and labels to numpy arrays
+image_data = np.array(image_data)
+labels = np.array(labels)
+
+# Split the dataset into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(image_data, labels, test_size=0.2, random_state=42)
+
+# Create base classifiers (Random Forests)
+n_estimators = 10
+base_classifiers = [RandomForestClassifier(n_estimators=n_estimators) for _ in range(n_estimators)]
+
+# Train base classifiers
+for classifier in base_classifiers:
+    classifier.fit(X_train.reshape(X_train.shape[0], -1), y_train)
+
+# Predict using base classifiers
+base_predictions_train = np.array([classifier.predict(X_train.reshape(X_train.shape[0], -1)) for classifier in base_classifiers])
+base_predictions_test = np.array([classifier.predict(X_test.reshape(X_test.shape[0], -1)) for classifier in base_classifiers])
+
+# Create a deep learning model
+model = Sequential()
+model.add(Conv2D(32, (3, 3), activation='relu', input_shape=input_shape))
+model.add(MaxPooling2D((2, 2)))
+model.add(Conv2D(64, (3, 3), activation='relu'))
+model.add(MaxPooling2D((2, 2)))
+model.add(Conv2D(128, (3, 3), activation='relu'))
+model.add(MaxPooling2D((2, 2)))
+model.add(Conv2D(128, (3, 3), activation='relu'))
+model.add(MaxPooling2D((2, 2)))
+model.add(Flatten())
+model.add(Dense(128, activation='relu'))
+model.add(Dropout(0.5))  # Add dropout layer for regularization
+model.add(Dense(1, activation='sigmoid'))
+
+# Compile the model
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+# Train the deep learning model
+model.fit(X_train, y_train, epochs=20, batch_size=32)
+
+# Obtain predictions from the deep learning model
+dl_predictions_train = model.predict(X_train)
+dl_predictions_test = model.predict(X_test)
+
+# Concatenate the base classifier predictions and deep learning model predictions
+X_train_combined = np.concatenate((base_predictions_train.T, dl_predictions_train), axis=1)
+X_test_combined = np.concatenate((base_predictions_test.T, dl_predictions_test), axis=1)
+
+# Create the AdaBoost classifier
+boosting_classifier = AdaBoostClassifier(n_estimators=n_estimators)
+
+# Train the AdaBoost classifier on the combined predictions
+boosting_classifier.fit(X_train_combined, y_train)
+
+# Predict using the AdaBoost classifier
+boosting_predictions_train = boosting_classifier.predict(X_train_combined)
+boosting_predictions_test = boosting_classifier.predict(X_test_combined)
+
+# Calculate accuracy of the ensemble model on training and testing data
+ensemble_train_accuracy = accuracy_score(y_train, boosting_predictions_train)
+ensemble_test_accuracy = accuracy_score(y_test, boosting_predictions_test)
+
+print("Ensemble Training Accuracy:", ensemble_train_accuracy)
+print("Ensemble Testing Accuracy:", ensemble_test_accuracy)
+
+model.save('path_to_saved_model2.h5')
