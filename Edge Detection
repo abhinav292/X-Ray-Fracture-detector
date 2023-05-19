@@ -1,0 +1,126 @@
+# -*- coding: utf-8 -*-
+"""
+
+@author: Abhinav Sharma
+
+_/﹋\_
+(҂`_´)
+<,︻╦╤─ ҉ - -
+_/﹋\_                                                       
+"""
+
+import cv2
+import numpy as np
+import os
+from skimage.util import random_noise
+
+# Define the input folder path
+input_folder = r'D:\im\ '
+
+# Remove the extra space at the end of the input folder path
+input_folder = input_folder.strip()
+
+
+# Get the list of all image files in the folder
+image_files = [f for f in os.listdir(input_folder) if os.path.isfile(os.path.join(input_folder, f))]
+
+# Process each image
+for image_file in image_files:
+    # Load the input image
+    input_image_path = os.path.join(input_folder, image_file)
+    img = cv2.imread(input_image_path)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # Add salt-and-pepper noise to the image
+    noise_img = random_noise(gray, mode='s&p', amount=0.2)
+    noise_img = np.array(255 * noise_img, dtype='uint8')
+
+    # Define the output folder path
+    output_folder = r'D:\im ' + os.path.splitext(image_file)[0]
+    os.makedirs(output_folder, exist_ok=True)
+
+    # Define a helper function to save images
+    def save_image(image, output_path):
+        output_filename = os.path.join(output_folder, output_path)
+        cv2.imwrite(output_filename, image)
+
+    # Gaussian blur
+    img_gaussian = cv2.GaussianBlur(noise_img, (3, 3), 0)
+    save_image(img_gaussian, 'gaussian.jpg')
+
+    # Median blur
+    median = cv2.medianBlur(noise_img, 5)
+    save_image(median, 'median.jpg')
+
+    # Sobel
+    img_sobelx = cv2.Sobel(median, cv2.CV_8U, 1, 0, ksize=5)
+    img_sobely = cv2.Sobel(median, cv2.CV_8U, 0, 1, ksize=5)
+    img_sobel = img_sobelx + img_sobely
+    save_image(img_sobel, 'sobel.jpg')
+
+    # Prewitt
+    kernelx = np.array([[1, 1, 1], [0, 0, 0], [-1, -1, -1]])
+    kernely = np.array([[-1, 0, 1], [-1, 0, 1], [-1, 0, 1]])
+    img_prewittx = cv2.filter2D(median, -1, kernelx)
+    img_prewitty = cv2.filter2D(median, -1, kernely)
+    save_image(img_prewittx + img_prewitty, 'prewitt.jpg')
+
+    # Laplace
+    laplace = cv2.Laplacian(median, cv2.CV_64F)
+    laplace = np.uint8(np.absolute(laplace))
+    save_image(laplace, 'laplace.jpg')
+
+    # Canny
+    img_canny2 = cv2.Canny(laplace, 50, 55)
+    save_image(img_canny2, 'canny2.jpg')
+
+    img_canny = cv2.Canny(median, 50, 55)
+    save_image(img_canny, 'canny.jpg')
+
+    # Calculate PSNR values
+    psnr1 = cv2.PSNR(median, (img_sobel + img_canny))
+    psnr2 = cv2.PSNR(median, laplace)
+    psnr3 = cv2.PSNR(median, (img_prewittx + img_prewitty))
+    psnr4 = cv2.PSNR(median, img_canny)
+    psnr5 = cv2.PSNR(median, img_sobel)
+    psnr6 = cv2.PSNR(median, (img_sobel + laplace))
+    psnr7 = cv2.PSNR(median, img_prewittx + img_prewitty + img_canny)
+    psnr8 = cv2.PSNR(median, (img_canny + laplace))
+    psnr9 = cv2.PSNR(median, (img_sobel + img_prewittx + img_prewitty + laplace))
+    psnr10 = cv2.PSNR(median, (laplace + img_prewittx + img_prewitty))
+    psnr11 = cv2.PSNR(median, img_prewittx + img_prewitty + img_canny + laplace)
+    psnr12 = cv2.PSNR(median, img_prewittx + img_prewitty + img_sobel + laplace)
+    psnr13 = cv2.PSNR(median, img_canny2)
+    psnr14 = cv2.PSNR(median, img_prewittx + img_prewitty + img_canny2 + laplace)
+
+    # Print PSNR values
+    print(f"PSNR value of sobel canny: {psnr1} dB")
+    print(f"PSNR value of laplace: {psnr2} dB")
+    print(f"PSNR value of prewitt: {psnr3} dB")
+    print(f"PSNR value of canny: {psnr4} dB")
+    print(f"PSNR value of sobel: {psnr5} dB")
+    print(f"PSNR value of sobel laplace: {psnr6} dB")
+    print(f"PSNR value of prewitt canny: {psnr7} dB")
+    print(f"PSNR value of canny+laplace: {psnr8} dB")
+    print(f"PSNR value of prewitt sobel: {psnr9} dB")
+    print(f"PSNR value of prewitt laplace canny: {psnr11} dB")
+    print(f"PSNR value of prewitt laplace sobel: {psnr12} dB")
+    print(f"PSNR value of canny_hyb: {psnr13} dB")
+    print(f"PSNR value of prewitt laplace canny_hyb: {psnr14} dB")
+
+    # Display the images
+    cv2.imshow('Input Image', img)
+    cv2.imshow('Canny Edge Detection', img_canny)
+    cv2.imshow('Canny Edge Detection (Threshold 2)', img_canny2)
+    cv2.imshow('Sobel Edge Detection', img_sobel)
+    cv2.imshow('Prewitt Edge Detection', img_prewittx + img_prewitty)
+    cv2.imshow('Sobel + Laplace', img_sobel + laplace)
+    cv2.imshow('Prewitt + Canny', img_prewittx + img_prewitty + img_canny)
+    cv2.imshow('Prewitt + Sobel + Laplace', img_prewittx + img_prewitty + img_sobel + laplace)
+    cv2.imshow('Prewitt + Canny + Laplace', img_prewittx + img_prewitty + img_canny + laplace)
+    cv2.imshow('Prewitt + Canny2 + Laplace', img_prewittx + img_prewitty + img_canny2 + laplace)
+
+    # Wait for key press and close windows
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
